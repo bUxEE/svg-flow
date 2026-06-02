@@ -1,0 +1,926 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>svgFlow — Playground</title>
+  <style>
+    /* ── Tokens ───────────────────────────────────────────────────────────
+       Tinted neutrals (no pure black/white), one electric-cyan accent that
+       matches the library's default flow color. OKLCH where it helps. */
+    :root {
+      --bg:        oklch(0.16 0.012 250);
+      --bg-raise:  oklch(0.20 0.014 250);
+      --bg-sink:   oklch(0.13 0.012 250);
+      --line:      oklch(0.30 0.015 250);
+      --line-soft: oklch(0.26 0.015 250);
+      --text:      oklch(0.92 0.01 250);
+      --text-dim:  oklch(0.68 0.012 250);
+      --text-mute: oklch(0.52 0.012 250);
+      --accent:    oklch(0.85 0.16 180);
+      --accent-dim:oklch(0.72 0.13 180);
+      --danger:    oklch(0.70 0.16 18);
+      --radius:    10px;
+      --ease-out:  cubic-bezier(0.23, 1, 0.32, 1);
+      --panel-w:   312px;
+      font-synthesis: none;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; }
+    body {
+      /* Backdrop lives on body so the z-index:-1 flow overlay paints above it
+         but below page content. The stage itself stays transparent. */
+      background:
+        radial-gradient(1100px 700px at 70% 25%, oklch(0.20 0.02 200 / 0.5), transparent 70%),
+        var(--bg-sink);
+      color: var(--text);
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      font-size: 13px;
+      line-height: 1.4;
+      /* Window itself scrolls so svgFlow's document-space overlay + default
+         `scrollContainer: window` drive the flow. Rail is fixed; stage flows. */
+      overflow-x: hidden;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ── Layout: fixed control rail + scrolling stage ────────────────────── */
+    .app { display: block; }
+
+    .stage {
+      position: relative;
+      margin-left: var(--panel-w);   /* clear the fixed rail */
+      min-width: 0;
+      /* Tall enough to scroll: lets dragged-down nodes stay reachable and
+         lets you actually test the scroll-momentum params. */
+      min-height: 220vh;
+      background: transparent;   /* let the body-level flow show through */
+    }
+    /* svgFlow paints into body at z-index:-1; the stage is a transparent host */
+
+    .stage-grid {
+      position: absolute;
+      inset: 0;
+      background-image:
+        linear-gradient(var(--line-soft) 1px, transparent 1px),
+        linear-gradient(90deg, var(--line-soft) 1px, transparent 1px);
+      background-size: 32px 32px;
+      opacity: 0.18;
+      pointer-events: none;
+    }
+
+    .node {
+      position: absolute;
+      min-width: 116px;
+      padding: 13px 16px;
+      background: var(--bg-raise);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      font-size: 12px;
+      font-weight: 650;
+      letter-spacing: 0.03em;
+      text-align: center;
+      color: var(--accent);
+      cursor: grab;
+      user-select: none;
+      transition: transform 140ms var(--ease-out),
+                  border-color 140ms var(--ease-out),
+                  box-shadow 140ms var(--ease-out);
+      box-shadow: 0 8px 24px -16px oklch(0.05 0.01 250 / 0.9);
+    }
+    .node:hover { border-color: var(--accent-dim); }
+    .node.dragging {
+      cursor: grabbing;
+      transform: scale(1.04);
+      border-color: var(--accent);
+      box-shadow: 0 16px 40px -18px oklch(0.05 0.01 250 / 1);
+      z-index: 500;
+    }
+    .node .badge {
+      display: block;
+      font-size: 9px;
+      font-weight: 600;
+      letter-spacing: 0.14em;
+      color: var(--text-mute);
+      margin-top: 3px;
+    }
+
+    /* ── Control rail ────────────────────────────────────────────────────── */
+    .rail {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: var(--panel-w);
+      flex: none;
+      height: 100vh;
+      background: var(--bg-sink);
+      border-right: 1px solid var(--line);
+      display: flex;
+      flex-direction: column;
+      z-index: 1000;
+    }
+    .rail-head {
+      padding: 16px 18px 14px;
+      border-bottom: 1px solid var(--line);
+    }
+    .rail-head h1 {
+      font-size: 15px;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      display: flex;
+      align-items: baseline;
+      gap: 7px;
+    }
+    .rail-head h1 .mark { color: var(--accent); }
+    .rail-head p {
+      margin-top: 4px;
+      font-size: 11px;
+      color: var(--text-mute);
+      letter-spacing: 0.02em;
+    }
+    .rail-body {
+      flex: 1;
+      overflow-y: auto;
+      padding: 6px 0 24px;
+      scrollbar-width: thin;
+      scrollbar-color: var(--line) transparent;
+    }
+    .rail-body::-webkit-scrollbar { width: 9px; }
+    .rail-body::-webkit-scrollbar-thumb {
+      background: var(--line); border-radius: 9px;
+      border: 3px solid var(--bg-sink);
+    }
+
+    /* Collapsible sections */
+    .sec { border-bottom: 1px solid var(--line-soft); }
+    .sec > summary {
+      list-style: none;
+      cursor: pointer;
+      padding: 12px 18px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--text-dim);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      transition: color 140ms var(--ease-out);
+    }
+    .sec > summary:hover { color: var(--text); }
+    .sec > summary::-webkit-details-marker { display: none; }
+    .sec > summary .chev {
+      width: 9px; height: 9px;
+      border-right: 1.5px solid currentColor;
+      border-bottom: 1.5px solid currentColor;
+      transform: rotate(-45deg);
+      transition: transform 160ms var(--ease-out);
+    }
+    .sec[open] > summary .chev { transform: rotate(45deg); }
+    .sec-body { padding: 4px 18px 16px; }
+
+    /* Control rows */
+    .field { margin-bottom: 13px; }
+    .field:last-child { margin-bottom: 2px; }
+    .field > label {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      font-size: 11px;
+      color: var(--text-dim);
+      margin-bottom: 6px;
+      letter-spacing: 0.02em;
+    }
+    .field > label .val {
+      font-variant-numeric: tabular-nums;
+      color: var(--accent);
+      font-weight: 650;
+      font-size: 11px;
+    }
+
+    input[type="range"] {
+      -webkit-appearance: none; appearance: none;
+      width: 100%; height: 3px; border-radius: 3px;
+      background: var(--line);
+      outline: none; cursor: pointer;
+    }
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none; appearance: none;
+      width: 15px; height: 15px; border-radius: 50%;
+      background: var(--accent);
+      border: 2px solid var(--bg-sink);
+      cursor: grab;
+      transition: transform 120ms var(--ease-out);
+    }
+    input[type="range"]::-webkit-slider-thumb:active { transform: scale(1.25); cursor: grabbing; }
+    input[type="range"]::-moz-range-thumb {
+      width: 15px; height: 15px; border-radius: 50%;
+      background: var(--accent); border: 2px solid var(--bg-sink); cursor: grab;
+    }
+
+    select, input[type="text"] {
+      width: 100%;
+      padding: 7px 9px;
+      background: var(--bg-raise);
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      color: var(--text);
+      font-size: 12px;
+      font-family: inherit;
+      outline: none;
+      transition: border-color 140ms var(--ease-out);
+    }
+    select:focus, input[type="text"]:focus { border-color: var(--accent-dim); }
+
+    input[type="color"] {
+      width: 32px; height: 28px; padding: 0;
+      background: var(--bg-raise);
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      cursor: pointer;
+    }
+    input[type="color"]::-webkit-color-swatch-wrapper { padding: 3px; }
+    input[type="color"]::-webkit-color-swatch { border: none; border-radius: 4px; }
+
+    .seg-toggle { display: flex; align-items: center; gap: 8px; }
+    .switch {
+      position: relative; width: 32px; height: 18px;
+      background: var(--line); border-radius: 18px;
+      cursor: pointer; flex: none;
+      transition: background 160ms var(--ease-out);
+    }
+    .switch::after {
+      content: ''; position: absolute; top: 2px; left: 2px;
+      width: 14px; height: 14px; border-radius: 50%;
+      background: var(--text-dim);
+      transition: transform 160ms var(--ease-out), background 160ms var(--ease-out);
+    }
+    .switch[data-on="true"] { background: var(--accent-dim); }
+    .switch[data-on="true"]::after { transform: translateX(14px); background: var(--bg-sink); }
+
+    /* Segment cards */
+    .seg {
+      background: var(--bg-raise);
+      border: 1px solid var(--line-soft);
+      border-radius: 9px;
+      padding: 11px 12px 4px;
+      margin-bottom: 10px;
+    }
+    .seg-head {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 9px;
+    }
+    .seg-head .title {
+      font-size: 10px; font-weight: 700; letter-spacing: 0.1em;
+      text-transform: uppercase; color: var(--text-dim);
+    }
+    .seg-head .swatch {
+      width: 11px; height: 11px; border-radius: 3px; display: inline-block;
+      margin-right: 6px; vertical-align: -1px;
+    }
+    .icon-btn {
+      width: 22px; height: 22px;
+      display: grid; place-items: center;
+      background: transparent; border: 1px solid transparent;
+      border-radius: 6px; color: var(--text-mute);
+      cursor: pointer; font-size: 13px; line-height: 1;
+      transition: color 140ms var(--ease-out), background 140ms var(--ease-out);
+    }
+    .icon-btn:hover { color: var(--danger); background: oklch(0.70 0.16 18 / 0.1); }
+    .icon-btn:active { transform: scale(0.92); }
+
+    .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 9px 12px; }
+    .mini > label { font-size: 10px; }
+    .mini > label .val { font-size: 10px; }
+
+    /* Buttons */
+    .btn {
+      width: 100%;
+      padding: 9px 12px;
+      border-radius: 8px;
+      font-size: 12px; font-weight: 650; letter-spacing: 0.02em;
+      font-family: inherit;
+      cursor: pointer;
+      border: 1px solid var(--line);
+      background: var(--bg-raise);
+      color: var(--text);
+      transition: transform 130ms var(--ease-out), border-color 130ms var(--ease-out), background 130ms var(--ease-out);
+    }
+    .btn:hover { border-color: var(--accent-dim); }
+    .btn:active { transform: scale(0.98); }
+    .btn.ghost { background: transparent; }
+    .btn-row { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
+    .btn.accent {
+      background: var(--accent);
+      color: var(--bg-sink);
+      border-color: var(--accent);
+      font-weight: 700;
+    }
+    .btn.accent:hover { background: var(--accent-dim); border-color: var(--accent-dim); }
+
+    /* Floating stage toolbar — fixed so it stays put while the stage scrolls */
+    .stage-bar {
+      position: fixed;
+      top: 16px; right: 16px;
+      display: flex; gap: 8px;
+      z-index: 600;
+    }
+    .pill {
+      padding: 8px 13px;
+      background: oklch(0.20 0.014 250 / 0.85);
+      backdrop-filter: blur(8px);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      font-size: 11px; font-weight: 600; letter-spacing: 0.03em;
+      color: var(--text-dim);
+      cursor: pointer;
+      transition: transform 130ms var(--ease-out), color 130ms var(--ease-out), border-color 130ms var(--ease-out);
+    }
+    .pill:hover { color: var(--text); border-color: var(--accent-dim); }
+    .pill:active { transform: scale(0.97); }
+    .pill[data-on="false"] { color: var(--text-mute); }
+
+    .stage-hint {
+      position: fixed;
+      bottom: 16px; left: calc(50% + var(--panel-w) / 2);
+      transform: translateX(-50%);
+      font-size: 11px;
+      color: var(--text-mute);
+      letter-spacing: 0.06em;
+      pointer-events: none;
+      white-space: nowrap;
+    }
+
+    /* Export drawer */
+    .export {
+      position: fixed;
+      inset: 0;
+      background: oklch(0.13 0.012 250 / 0.7);
+      backdrop-filter: blur(3px);
+      display: none;
+      place-items: center;
+      z-index: 2000;
+      padding: 24px;
+    }
+    .export[data-open="true"] { display: grid; }
+    .export-card {
+      width: min(640px, 100%);
+      max-height: 80vh;
+      background: var(--bg-raise);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      display: flex; flex-direction: column;
+      overflow: hidden;
+      box-shadow: 0 40px 80px -30px oklch(0.05 0.01 250 / 0.9);
+      animation: pop 200ms var(--ease-out);
+    }
+    @keyframes pop { from { opacity: 0; transform: scale(0.97); } }
+    .export-card header {
+      padding: 14px 18px;
+      border-bottom: 1px solid var(--line-soft);
+      display: flex; align-items: center; justify-content: space-between;
+      font-size: 12px; font-weight: 700; letter-spacing: 0.04em;
+    }
+    .export-card pre {
+      flex: 1; overflow: auto; margin: 0;
+      padding: 16px 18px;
+      font-family: 'Cascadia Code', 'Consolas', monospace;
+      font-size: 12px; line-height: 1.55;
+      color: var(--text-dim);
+      white-space: pre;
+    }
+    .export-card footer {
+      padding: 12px 18px; border-top: 1px solid var(--line-soft);
+      display: flex; gap: 10px; justify-content: flex-end;
+    }
+    .export-card footer .btn { width: auto; padding: 8px 16px; }
+
+    @media (prefers-reduced-motion: reduce) {
+      * { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <!-- ── Control rail ───────────────────────────────────────────────── -->
+    <aside class="rail">
+      <div class="rail-head">
+        <h1><span class="mark">svg</span>Flow · Playground</h1>
+        <p>Tune every option, drag nodes, wire paths.</p>
+      </div>
+
+      <div class="rail-body" id="rail-body">
+
+        <details class="sec" open>
+          <summary>Path shape <span class="chev"></span></summary>
+          <div class="sec-body">
+            <div class="field">
+              <label for="cornerStyle">Corner style</label>
+              <select id="cornerStyle">
+                <option value="rounded">rounded</option>
+                <option value="curved">curved</option>
+                <option value="sharp">sharp</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="cornerRadius">Corner radius <span class="val" id="cornerRadius-v">22</span></label>
+              <input type="range" id="cornerRadius" min="0" max="80" value="22" />
+            </div>
+            <div class="field">
+              <label for="contourHug">Contour hug <span class="val" id="contourHug-v">10</span></label>
+              <input type="range" id="contourHug" min="0" max="40" value="10" />
+            </div>
+            <div class="field">
+              <label for="nearThreshold">Near threshold <span class="val" id="nearThreshold-v">30</span></label>
+              <input type="range" id="nearThreshold" min="0" max="120" value="30" />
+            </div>
+            <div class="field seg-toggle">
+              <span class="switch" id="nearAuto" data-on="false"></span>
+              <span style="color:var(--text-dim)">Auto (width-coupled, ≤30)</span>
+            </div>
+            <div class="field">
+              <label for="hugDirection">Hug direction</label>
+              <select id="hugDirection">
+                <option value="long">long</option>
+                <option value="short">short</option>
+              </select>
+            </div>
+          </div>
+        </details>
+
+        <details class="sec" open>
+          <summary>Track (tube) <span class="chev"></span></summary>
+          <div class="sec-body">
+            <div class="field seg-toggle">
+              <span class="switch" id="trackTube" data-on="true"></span>
+              <span style="color:var(--text-dim)">3D tube (double stroke)</span>
+            </div>
+            <div class="row2">
+              <div class="field mini">
+                <label for="trackWidth">Width <span class="val" id="trackWidth-v">8</span></label>
+                <input type="range" id="trackWidth" min="1" max="30" value="8" />
+              </div>
+              <div class="field mini">
+                <label for="trackInnerWidth">Inner <span class="val" id="trackInnerWidth-v">3</span></label>
+                <input type="range" id="trackInnerWidth" min="0" max="20" value="3" />
+              </div>
+            </div>
+            <div class="row2">
+              <div class="field mini">
+                <label for="trackColor">Outer color</label>
+                <input type="color" id="trackColor" value="#9c9c9c" />
+              </div>
+              <div class="field mini">
+                <label for="trackInnerColor">Inner color</label>
+                <input type="color" id="trackInnerColor" value="#12182a" />
+              </div>
+              <div class="field mini">
+                <label for="trackColorA">Outer alpha <span class="val" id="trackColorA-v">1.00</span></label>
+                <input type="range" id="trackColorA" min="0" max="1" step="0.05" value="1" />
+              </div>
+              <div class="field mini">
+                <label for="trackInnerColorA">Inner alpha <span class="val" id="trackInnerColorA-v">1.00</span></label>
+                <input type="range" id="trackInnerColorA" min="0" max="1" step="0.05" value="1" />
+              </div>
+            </div>
+            <div class="field">
+              <label for="trackBlur">Track glow <span class="val" id="trackBlur-v">0</span></label>
+              <input type="range" id="trackBlur" min="0" max="14" value="0" />
+            </div>
+          </div>
+        </details>
+
+        <details class="sec" open>
+          <summary>Animation <span class="chev"></span></summary>
+          <div class="sec-body">
+            <div class="field">
+              <label for="baseSpeed">Base speed <span class="val" id="baseSpeed-v">0.80</span></label>
+              <input type="range" id="baseSpeed" min="0" max="4" step="0.05" value="0.8" />
+            </div>
+            <div class="field">
+              <label for="scrollMultiplier">Scroll boost <span class="val" id="scrollMultiplier-v">0.08</span></label>
+              <input type="range" id="scrollMultiplier" min="0" max="0.4" step="0.005" value="0.08" />
+            </div>
+            <div class="field">
+              <label for="friction">Friction <span class="val" id="friction-v">0.92</span></label>
+              <input type="range" id="friction" min="0.7" max="0.99" step="0.005" value="0.92" />
+            </div>
+            <div class="field seg-toggle">
+              <span class="switch" id="accelerateOnScroll" data-on="true"></span>
+              <span style="color:var(--text-dim)">Accelerate on scroll</span>
+            </div>
+            <div class="field seg-toggle">
+              <span class="switch" id="reverseOnScrollUp" data-on="true"></span>
+              <span style="color:var(--text-dim)">Reverse on scroll up</span>
+            </div>
+          </div>
+        </details>
+
+        <details class="sec" open>
+          <summary>Segments <span class="chev"></span></summary>
+          <div class="sec-body">
+            <div id="segments"></div>
+            <button class="btn ghost" id="add-segment">+ Add segment layer</button>
+          </div>
+        </details>
+
+      </div>
+    </aside>
+
+    <!-- ── Stage ──────────────────────────────────────────────────────── -->
+    <main class="stage" id="stage">
+      <div class="stage-grid"></div>
+
+      <div class="stage-bar">
+        <button class="pill" id="btn-add-node">+ Node</button>
+        <button class="pill" id="btn-remove-node">− Node</button>
+        <button class="pill" id="btn-playpause" data-on="true">Pause</button>
+        <button class="pill" id="btn-reset">Reset</button>
+        <button class="pill" id="btn-export">Export</button>
+      </div>
+
+      <div class="stage-hint">drag nodes to reroute · scroll ↓ accelerate · scroll ↑ reverse · tune on the left</div>
+    </main>
+  </div>
+
+  <!-- ── Export drawer ────────────────────────────────────────────────── -->
+  <div class="export" id="export" data-open="false">
+    <div class="export-card">
+      <header>
+        <span>Config — paste into <code style="color:var(--accent)">new SvgFlow({…})</code></span>
+        <button class="icon-btn" id="export-close" style="color:var(--text-dim)">✕</button>
+      </header>
+      <pre id="export-code"></pre>
+      <footer>
+        <button class="btn ghost" id="export-copy">Copy</button>
+        <button class="btn accent" id="export-done">Done</button>
+      </footer>
+    </div>
+  </div>
+
+  <script type="module">
+    import { SvgFlow } from '../dist/svgflow.js'
+
+    // ── Color helpers ───────────────────────────────────────────────────
+    // The library passes stroke colors straight through, so emitting rgba() gives
+    // every color picker an alpha channel (native <input type=color> has none).
+    const hexA = (hex, a) => {
+      const h = hex.replace('#', '')
+      const r = parseInt(h.slice(0, 2), 16), g = parseInt(h.slice(2, 4), 16), b = parseInt(h.slice(4, 6), 16)
+      return `rgba(${r}, ${g}, ${b}, ${Number(a).toFixed(2)})`
+    }
+
+    // ── State ───────────────────────────────────────────────────────────
+    const PALETTE = ['#00ffcc', '#f59e0b', '#a78bfa', '#38bdf8', '#fb7185', '#a3e635']
+
+    const defaultSegments = () => ([
+      { width: 18, length: 80, gap: 200, color: '#00ffcc', colorA: 1, opacity: 0.35, blur: 6, speedMultiplier: 1.0, easing: 'linear' },
+      { width: 4,  length: 40, gap: 600, color: '#00ffcc', colorA: 1, opacity: 0.90, blur: 0, speedMultiplier: 1.4, easing: 'linear' },
+      { width: 10, length: 20, gap: 400, color: '#00ffcc', colorA: 1, opacity: 0.80, blur: 4, speedMultiplier: 0.7, easing: 'wave', wavePeriod: 2000, waveAmplitude: 1.5 },
+    ])
+
+    const state = {
+      cornerStyle: 'rounded',
+      cornerRadius: 22,
+      contourHug: 10,
+      nearThreshold: 30,
+      nearAuto: false,        // when true, omit nearThreshold → width-coupled default
+      hugDirection: 'long',
+      track: { tube: true, width: 8, innerWidth: 3, color: '#9c9c9c', colorA: 1, innerColor: '#12182a', innerColorA: 1, blur: 0 },
+      baseSpeed: 0.8,
+      scrollMultiplier: 0.08,
+      friction: 0.92,
+      accelerateOnScroll: true,
+      reverseOnScrollUp: true,
+      segments: defaultSegments(),
+      nodeCount: 5,
+      playing: true,
+    }
+
+    // ── Nodes ───────────────────────────────────────────────────────────
+    const stage = document.getElementById('stage')
+    const NODE_LABELS = ['Source', 'Ingest', 'Process', 'Filter', 'Output', 'Merge', 'Sink', 'Branch']
+
+    const seedPositions = (n) => {
+      // place nodes on a gentle zigzag across the stage
+      const r = stage.getBoundingClientRect()
+      const padX = 90, padY = 70
+      const usableW = Math.max(260, r.width - padX * 2)
+      // Seed within ~1.3 viewports tall (not the full 220vh stage) so the initial
+      // layout reads well but there's empty space below to drag nodes into / scroll.
+      const seedH = Math.min(r.height, window.innerHeight * 1.3)
+      const usableH = Math.max(260, seedH - padY * 2)
+      const pos = []
+      for (let i = 0; i < n; i++) {
+        const t = n === 1 ? 0 : i / (n - 1)
+        const x = padX + t * usableW
+        const y = padY + (i % 2 === 0 ? 0.18 : 0.72) * usableH + (Math.sin(i * 1.7) * 28)
+        pos.push({ x, y })
+      }
+      return pos
+    }
+
+    let nodeEls = []
+    const buildNodes = (positions) => {
+      nodeEls.forEach(el => el.remove())
+      nodeEls = []
+      positions.forEach((p, i) => {
+        const el = document.createElement('div')
+        el.className = 'node'
+        el.id = `pg-node-${i}`
+        el.style.left = `${p.x}px`
+        el.style.top = `${p.y}px`
+        el.innerHTML = `${NODE_LABELS[i % NODE_LABELS.length]}<span class="badge">#${i + 1}</span>`
+        stage.appendChild(el)
+        makeDraggable(el)
+        nodeEls.push(el)
+      })
+    }
+
+    // ── Dragging (pointer capture + transform-free position) ─────────────
+    const makeDraggable = (el) => {
+      let startX, startY, originLeft, originTop, dragging = false
+      el.addEventListener('pointerdown', (e) => {
+        dragging = true
+        el.setPointerCapture(e.pointerId)
+        el.classList.add('dragging')
+        startX = e.clientX; startY = e.clientY
+        originLeft = parseFloat(el.style.left); originTop = parseFloat(el.style.top)
+        e.preventDefault()
+      })
+      el.addEventListener('pointermove', (e) => {
+        if (!dragging) return
+        const nx = originLeft + (e.clientX - startX)
+        const ny = originTop + (e.clientY - startY)
+        el.style.left = `${nx}px`
+        el.style.top = `${ny}px`
+        // Live re-route: cheap geometry refresh (no destroy/recreate) per move.
+        flow?.refresh()
+      })
+      const end = (e) => {
+        if (!dragging) return
+        dragging = false
+        el.classList.remove('dragging')
+        try { el.releasePointerCapture(e.pointerId) } catch {}
+        flow?.refresh()
+      }
+      el.addEventListener('pointerup', end)
+      el.addEventListener('pointercancel', end)
+    }
+
+    // ── Build / rebuild the SvgFlow instance ─────────────────────────────
+    // No live setOptions exists — every change destroys + recreates.
+    let flow = null
+    const buildConfig = () => ({
+      cornerStyle: state.cornerStyle,
+      cornerRadius: state.cornerRadius,
+      contourHug: state.contourHug,
+      // The library uses nearThreshold exactly. "Auto" derives a width-coupled
+      // value (≤30) here; otherwise the slider value is used as-is.
+      nearThreshold: state.nearAuto
+        ? Math.round(Math.min(30, Math.max(state.track.width, 12)))
+        : state.nearThreshold,
+      hugDirection: state.hugDirection,
+      baseSpeed: state.baseSpeed,
+      scrollMultiplier: state.scrollMultiplier,
+      friction: state.friction,
+      accelerateOnScroll: state.accelerateOnScroll,
+      reverseOnScrollUp: state.reverseOnScrollUp,
+      trackStyle: {
+        width: state.track.width,
+        // rgba so the outer/inner alpha sliders are honoured on the track strokes.
+        color: hexA(state.track.color, state.track.colorA),
+        linecap: 'round',
+        tube: state.track.tube,
+        innerColor: hexA(state.track.innerColor, state.track.innerColorA),
+        innerWidth: state.track.innerWidth,
+        blur: state.track.blur,
+        opacity: 1,
+      },
+      paths: [
+        {
+          elements: nodeEls.map(el => `#${el.id}`),
+          // Emit each segment colour as rgba() using its own alpha slider, so the
+          // colour picker is effectively rgba. Opacity stays a separate stroke
+          // control (the two multiply, giving independent colour-alpha + layer-opacity).
+          segments: state.segments.map(s => ({
+            ...s,
+            color: hexA(s.color, s.colorA ?? 1),
+          })),
+        },
+      ],
+    })
+
+    const rebuild = () => {
+      if (flow) flow.destroy()
+      flow = new SvgFlow(buildConfig())
+      if (!state.playing) flow.pause()
+    }
+
+    // ── Controls wiring ──────────────────────────────────────────────────
+    const bindRange = (id, key, fmt = (v) => v, parse = parseFloat, target = state) => {
+      const input = document.getElementById(id)
+      const out = document.getElementById(`${id}-v`)
+      input.addEventListener('input', () => {
+        const v = parse(input.value)
+        setDeep(target, key, v)
+        if (out) out.textContent = fmt(v)
+        rebuild()
+      })
+    }
+    const setDeep = (obj, key, v) => {
+      const parts = key.split('.')
+      let o = obj
+      for (let i = 0; i < parts.length - 1; i++) o = o[parts[i]]
+      o[parts[parts.length - 1]] = v
+    }
+
+    bindRange('cornerRadius', 'cornerRadius')
+    bindRange('contourHug', 'contourHug')
+    bindRange('nearThreshold', 'nearThreshold')
+    bindRange('trackWidth', 'track.width')
+    bindRange('trackInnerWidth', 'track.innerWidth')
+    bindRange('trackBlur', 'track.blur')
+    bindRange('baseSpeed', 'baseSpeed', (v) => v.toFixed(2))
+    bindRange('scrollMultiplier', 'scrollMultiplier', (v) => v.toFixed(3))
+    bindRange('friction', 'friction', (v) => v.toFixed(3))
+    bindRange('trackColorA', 'track.colorA', (v) => v.toFixed(2))
+    bindRange('trackInnerColorA', 'track.innerColorA', (v) => v.toFixed(2))
+
+    document.getElementById('cornerStyle').addEventListener('change', (e) => { state.cornerStyle = e.target.value; rebuild() })
+    document.getElementById('hugDirection').addEventListener('change', (e) => { state.hugDirection = e.target.value; rebuild() })
+    document.getElementById('trackColor').addEventListener('input', (e) => { state.track.color = e.target.value; rebuild() })
+    document.getElementById('trackInnerColor').addEventListener('input', (e) => { state.track.innerColor = e.target.value; rebuild() })
+
+    const trackTube = document.getElementById('trackTube')
+    trackTube.addEventListener('click', () => {
+      state.track.tube = !state.track.tube
+      trackTube.dataset.on = String(state.track.tube)
+      rebuild()
+    })
+
+    // Boolean toggles bound directly to a top-level state key
+    const bindToggle = (id, key) => {
+      const el = document.getElementById(id)
+      el.addEventListener('click', () => {
+        state[key] = !state[key]
+        el.dataset.on = String(state[key])
+        rebuild()
+      })
+    }
+    bindToggle('accelerateOnScroll', 'accelerateOnScroll')
+    bindToggle('reverseOnScrollUp', 'reverseOnScrollUp')
+
+    // Near-threshold "auto" (width-coupled) toggle: disables the slider and shows
+    // "auto" in the readout when on, since the value is then derived from the tube.
+    const nearAutoEl   = document.getElementById('nearAuto')
+    const nearSlider   = document.getElementById('nearThreshold')
+    const nearReadout  = document.getElementById('nearThreshold-v')
+    const syncNearAuto = () => {
+      nearAutoEl.dataset.on = String(state.nearAuto)
+      nearSlider.disabled = state.nearAuto
+      nearSlider.style.opacity = state.nearAuto ? '0.4' : '1'
+      nearReadout.textContent = state.nearAuto
+        ? `auto ${Math.round(Math.min(30, Math.max(state.track.width, 12)))}`
+        : state.nearThreshold
+    }
+    nearAutoEl.addEventListener('click', () => {
+      state.nearAuto = !state.nearAuto
+      syncNearAuto()
+      rebuild()
+    })
+    syncNearAuto()
+
+    // ── Segment editor ────────────────────────────────────────────────────
+    const segHost = document.getElementById('segments')
+    const EASINGS = ['linear', 'pulse', 'wave', 'ease-in', 'ease-out', 'ease-in-out']
+
+    const renderSegments = () => {
+      segHost.innerHTML = ''
+      state.segments.forEach((seg, i) => {
+        const card = document.createElement('div')
+        card.className = 'seg'
+        card.innerHTML = `
+          <div class="seg-head">
+            <span class="title"><span class="swatch" style="background:${hexA(seg.color, seg.colorA ?? 1)}"></span>Layer ${i + 1}</span>
+            <button class="icon-btn" data-del="${i}" title="Remove layer">✕</button>
+          </div>
+          <div class="row2">
+            <div class="field mini"><label>Width <span class="val">${seg.width}</span></label><input type="range" data-seg="${i}" data-prop="width" min="1" max="40" value="${seg.width}"></div>
+            <div class="field mini"><label>Color</label><input type="color" data-seg="${i}" data-prop="color" value="${seg.color}"></div>
+            <div class="field mini"><label>Color α <span class="val">${(seg.colorA ?? 1).toFixed(2)}</span></label><input type="range" data-seg="${i}" data-prop="colorA" min="0" max="1" step="0.05" value="${seg.colorA ?? 1}"></div>
+            <div class="field mini"><label>Length <span class="val">${seg.length}</span></label><input type="range" data-seg="${i}" data-prop="length" min="4" max="200" value="${seg.length}"></div>
+            <div class="field mini"><label>Gap <span class="val">${seg.gap}</span></label><input type="range" data-seg="${i}" data-prop="gap" min="20" max="900" value="${seg.gap}"></div>
+            <div class="field mini"><label>Opacity <span class="val">${seg.opacity.toFixed(2)}</span></label><input type="range" data-seg="${i}" data-prop="opacity" min="0" max="1" step="0.05" value="${seg.opacity}"></div>
+            <div class="field mini"><label>Glow <span class="val">${seg.blur}</span></label><input type="range" data-seg="${i}" data-prop="blur" min="0" max="16" value="${seg.blur}"></div>
+            <div class="field mini"><label>Speed <span class="val">${seg.speedMultiplier.toFixed(2)}</span></label><input type="range" data-seg="${i}" data-prop="speedMultiplier" min="-2" max="3" step="0.1" value="${seg.speedMultiplier}"></div>
+            <div class="field mini"><label>Easing</label><select data-seg="${i}" data-prop="easing">${EASINGS.map(e => `<option value="${e}"${e === seg.easing ? ' selected' : ''}>${e}</option>`).join('')}</select></div>
+          </div>`
+        segHost.appendChild(card)
+      })
+    }
+
+    // Event delegation for all segment inputs
+    segHost.addEventListener('input', (e) => {
+      const t = e.target
+      const idx = t.dataset.seg
+      if (idx == null) return
+      const prop = t.dataset.prop
+      const seg = state.segments[+idx]
+      if (prop === 'color' || prop === 'easing') {
+        seg[prop] = t.value
+        if (prop === 'color') {
+          const sw = t.closest('.seg').querySelector('.swatch')
+          if (sw) sw.style.background = hexA(t.value, seg.colorA ?? 1)
+        }
+      } else {
+        const v = parseFloat(t.value)
+        seg[prop] = v
+        const label = t.previousElementSibling?.querySelector('.val')
+        if (label) label.textContent = (prop === 'opacity' || prop === 'speedMultiplier' || prop === 'colorA') ? v.toFixed(2) : v
+        // Keep the swatch in sync with the colour alpha.
+        if (prop === 'colorA') {
+          const sw = t.closest('.seg').querySelector('.swatch')
+          if (sw) sw.style.background = hexA(seg.color, v)
+        }
+      }
+      rebuild()
+    })
+    segHost.addEventListener('click', (e) => {
+      const del = e.target.dataset?.del
+      if (del == null) return
+      if (state.segments.length <= 1) return
+      state.segments.splice(+del, 1)
+      renderSegments(); rebuild()
+    })
+
+    document.getElementById('add-segment').addEventListener('click', () => {
+      const color = PALETTE[state.segments.length % PALETTE.length]
+      state.segments.push({ width: 6, length: 30, gap: 400, color, colorA: 1, opacity: 0.8, blur: 2, speedMultiplier: 1.0, easing: 'linear' })
+      renderSegments(); rebuild()
+    })
+
+    // ── Stage toolbar ──────────────────────────────────────────────────
+    document.getElementById('btn-add-node').addEventListener('click', () => {
+      if (state.nodeCount >= 8) return
+      state.nodeCount++
+      reseedAndBuild()
+    })
+    document.getElementById('btn-remove-node').addEventListener('click', () => {
+      if (state.nodeCount <= 2) return
+      state.nodeCount--
+      reseedAndBuild()
+    })
+    const reseedAndBuild = () => { buildNodes(seedPositions(state.nodeCount)); rebuild() }
+
+    const playBtn = document.getElementById('btn-playpause')
+    playBtn.addEventListener('click', () => {
+      state.playing = !state.playing
+      playBtn.textContent = state.playing ? 'Pause' : 'Resume'
+      playBtn.dataset.on = String(state.playing)
+      state.playing ? flow.resume() : flow.pause()
+    })
+
+    document.getElementById('btn-reset').addEventListener('click', () => location.reload())
+
+    // ── Export ─────────────────────────────────────────────────────────
+    const exportEl = document.getElementById('export')
+    const codeEl = document.getElementById('export-code')
+    const buildExportText = () => {
+      const cfg = buildConfig()
+      // swap live element ids for readable placeholders
+      cfg.paths[0].elements = nodeEls.map((_, i) => `#node-${i + 1}`)
+      const json = JSON.stringify(cfg, null, 2)
+        .replace(/"([a-zA-Z_]+)":/g, '$1:')        // unquote keys
+      return `new SvgFlow(${json})`
+    }
+    document.getElementById('btn-export').addEventListener('click', () => {
+      codeEl.textContent = buildExportText()
+      exportEl.dataset.open = 'true'
+    })
+    const closeExport = () => { exportEl.dataset.open = 'false' }
+    document.getElementById('export-close').addEventListener('click', closeExport)
+    document.getElementById('export-done').addEventListener('click', closeExport)
+    exportEl.addEventListener('click', (e) => { if (e.target === exportEl) closeExport() })
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeExport() })
+    document.getElementById('export-copy').addEventListener('click', async (e) => {
+      try {
+        await navigator.clipboard.writeText(codeEl.textContent)
+        e.target.textContent = 'Copied'
+        setTimeout(() => { e.target.textContent = 'Copy' }, 1400)
+      } catch { e.target.textContent = 'Copy failed' }
+    })
+
+    // ── Boot ─────────────────────────────────────────────────────────────
+    renderSegments()
+    buildNodes(seedPositions(state.nodeCount))
+    rebuild()
+
+    // Reseed on stage resize so nodes stay inside the frame
+    let rt
+    window.addEventListener('resize', () => {
+      clearTimeout(rt)
+      rt = setTimeout(() => { reseedAndBuild() }, 200)
+    })
+  </script>
+</body>
+</html>

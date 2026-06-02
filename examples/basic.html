@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>svgFlow — Basic</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: #07070f;
+      color: #e0e0e0;
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      min-height: 300vh;
+    }
+    .node {
+      position: absolute;
+      width: 140px;
+      padding: 16px 20px;
+      background: #111827;
+      border: 1px solid #1e3a5f;
+      border-radius: 10px;
+      font-size: 13px;
+      font-weight: 600;
+      color: #93c5fd;
+      text-align: center;
+      letter-spacing: 0.04em;
+      user-select: none;
+    }
+    #node-a { top: 120px;  left: 200px; }
+    #node-b { top: 400px;  left: 600px; }
+    #node-c { top: 700px;  left: 180px; }
+    #node-d { top: 1000px; left: 500px; }
+    .hint {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 11px;
+      color: #4b5563;
+      letter-spacing: 0.08em;
+    }
+  </style>
+</head>
+<body>
+  <div id="node-a" class="node">Node A</div>
+  <div id="node-b" class="node">Node B</div>
+  <div id="node-c" class="node">Node C</div>
+  <div id="node-d" class="node">Node D</div>
+  <p class="hint">scroll to drive the segments</p>
+
+  <script type="module">
+    import { SvgFlow } from '../dist/svgflow.js'
+
+    new SvgFlow({
+      // ── global path shape ─────────────────────────────────────────────
+      cornerStyle: 'rounded',   // 'sharp' | 'rounded' | 'curved'
+      cornerRadius: 24,
+      bends: 'auto',            // 'auto' | 1 | 2
+
+      // ── global track (tube body) ─────────────────────────────────────
+      trackStyle: {
+        width: 8,
+        color: '#0f1729',
+        linecap: 'round',
+        blur: 0,
+        opacity: 1,
+        tube: true,             // double-stroke tube illusion
+        innerColor: '#1a2744',
+        innerWidth: 3,
+      },
+
+      // ── global segment defaults (no color set — each path uses its own) ──
+
+      // ── animation ─────────────────────────────────────────────────────
+      baseSpeed: 0.8,
+      scrollMultiplier: 0.08,
+      friction: 0.92,
+
+      paths: [
+        // One continuous path: A → B → C → D, all cyan
+        {
+          elements: ['#node-a', '#node-b', '#node-c', '#node-d'],
+          cornerStyle: 'rounded',
+          cornerRadius: 24,
+          contourHug: 10,
+          hugDirection: 'long',
+          trackStyle: { color: '#0f1729', innerColor: '#1a2744', tube: true },
+          segments: [
+            { width: 18, length: 80, gap: 200, color: '#00ffcc', opacity: 0.35, blur: 6,  speedMultiplier: 1.0, easing: 'linear' },
+            { width: 4,  length: 40, gap: 600, color: '#00ffcc', opacity: 0.9,  blur: 0,  speedMultiplier: 1.4, easing: 'linear' },
+            { width: 10, length: 20, gap: 400, color: '#00ffcc', opacity: 0.8,  blur: 4,  speedMultiplier: 0.7, easing: 'linear' },
+          ],
+        },
+      ],
+    })
+  </script>
+</body>
+</html>

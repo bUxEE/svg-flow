@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>svgFlow — Multi-element paths</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: #05050d;
+      color: #c9d1d9;
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      min-height: 500vh;
+    }
+    .node {
+      position: absolute;
+      width: 160px;
+      padding: 18px 22px;
+      background: #0d1117;
+      border-radius: 12px;
+      font-size: 12px;
+      font-weight: 700;
+      text-align: center;
+      letter-spacing: 0.06em;
+      user-select: none;
+    }
+    .cyan   { border: 1px solid #00ffcc44; color: #00ffcc; }
+    .amber  { border: 1px solid #f59e0b44; color: #f59e0b; }
+    .purple { border: 1px solid #a78bfa44; color: #a78bfa; }
+    .rose   { border: 1px solid #fb718544; color: #fb7185; }
+    .sky    { border: 1px solid #38bdf844; color: #38bdf8; }
+    .lime   { border: 1px solid #a3e63544; color: #a3e635; }
+
+    #n1  { top:  80px;  left:  80px;  }
+    #n2  { top:  80px;  left:  460px; }
+    #n3  { top:  80px;  left:  820px; }
+    #n4  { top:  360px; left:  260px; }
+    #n5  { top:  360px; left:  640px; }
+    #n6  { top:  640px; left:  80px;  }
+    #n7  { top:  640px; left:  460px; }
+    #n8  { top:  640px; left:  820px; }
+    #n9  { top:  920px; left:  260px; }
+    #n10 { top:  920px; left:  640px; }
+    #n11 { top: 1200px; left:  80px;  }
+    #n12 { top: 1200px; left:  820px; }
+
+    .controls {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      z-index: 10000;
+    }
+    button {
+      padding: 8px 14px;
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 6px;
+      color: #c9d1d9;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      letter-spacing: 0.05em;
+      transition: background 0.15s;
+    }
+    button:hover { background: #21262d; }
+    .hint {
+      position: fixed;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 11px;
+      color: #30363d;
+      letter-spacing: 0.1em;
+    }
+  </style>
+</head>
+<body>
+  <div id="n1"  class="node cyan">   Input A     </div>
+  <div id="n2"  class="node amber">  Input B     </div>
+  <div id="n3"  class="node purple"> Input C     </div>
+  <div id="n4"  class="node sky">    Proc 1      </div>
+  <div id="n5"  class="node rose">   Proc 2      </div>
+  <div id="n6"  class="node lime">   Filter A    </div>
+  <div id="n7"  class="node cyan">   Filter B    </div>
+  <div id="n8"  class="node amber">  Filter C    </div>
+  <div id="n9"  class="node purple"> Merge       </div>
+  <div id="n10" class="node sky">    Transform   </div>
+  <div id="n11" class="node rose">   Output A    </div>
+  <div id="n12" class="node lime">   Output B    </div>
+
+  <div class="controls">
+    <button id="btn-pause">Pause</button>
+    <button id="btn-resume">Resume</button>
+    <button id="btn-add">+ Path</button>
+    <button id="btn-remove">− Last</button>
+  </div>
+  <p class="hint">scroll ↓ accelerate · scroll ↑ reverse</p>
+
+  <script type="module">
+    import { SvgFlow } from '../dist/svgflow.js'
+
+    const thinFast = (color) => ([
+      { width: 12, length: 60,  gap: 180, color, opacity: 0.4,  blur: 5, speedMultiplier: 1.2, easing: 'linear' },
+      { width: 3,  length: 25,  gap: 500, color, opacity: 0.95, blur: 0, speedMultiplier: 1.8, easing: 'linear' },
+      { width: 7,  length: 14,  gap: 320, color, opacity: 0.7,  blur: 3, speedMultiplier: 0.5, easing: 'wave', wavePeriod: 1800, waveAmplitude: 1.2 },
+    ])
+
+    const pulseSet = (color) => ([
+      { width: 20, length: 100, gap: 300, color, opacity: 0.3, blur: 8, speedMultiplier: 1.0, easing: 'linear' },
+      { width: 5,  length: 50,  gap: 400, color, opacity: 0.9, blur: 0, speedMultiplier: 1.5, easing: 'pulse', pulseOn: 400, pulseOff: 800 },
+      { width: 10, length: 22,  gap: 500, color, opacity: 0.6, blur: 4, speedMultiplier: 0.8, easing: 'ease-in-out' },
+    ])
+
+    const tc = new SvgFlow({
+      cornerStyle: 'rounded',
+      cornerRadius: 20,
+      bends: 'auto',
+      contourHug: 8,
+      trackStyle: {
+        width: 5,
+        color: '#0a0d13',
+        linecap: 'round',
+        opacity: 1,
+        tube: true,
+        innerColor: '#12182a',
+        innerWidth: 2,
+        blur: 0,
+      },
+      baseSpeed: 0.8,
+      scrollMultiplier: 0.08,
+      friction: 0.92,
+
+      paths: [
+        // Cyan chain: Input A → Proc 1 → Filter A → Merge → Output A
+        {
+          elements: ['#n1', '#n4', '#n6', '#n9', '#n11'],
+          cornerStyle: 'rounded',
+          cornerRadius: 20,
+          segments: thinFast('#00ffcc'),
+        },
+        // Amber chain: Input B → Proc 1 → Filter B → Merge → Output A
+        {
+          elements: ['#n2', '#n4', '#n7', '#n9', '#n11'],
+          cornerStyle: 'curved',
+          cornerRadius: 30,
+          segments: thinFast('#f59e0b'),
+        },
+        // Purple chain: Input C → Proc 2 → Filter C → Transform → Output B
+        {
+          elements: ['#n3', '#n5', '#n8', '#n10', '#n12'],
+          cornerStyle: 'rounded',
+          cornerRadius: 16,
+          segments: thinFast('#a78bfa'),
+        },
+        // Sky pulse: Input B → Proc 2 → Filter B → Transform → Output B
+        {
+          elements: ['#n2', '#n5', '#n7', '#n10', '#n12'],
+          cornerStyle: 'sharp',
+          segments: pulseSet('#38bdf8'),
+        },
+        // Rose wave: Proc 2 → Filter C → Transform
+        {
+          elements: ['#n5', '#n8', '#n10'],
+          cornerStyle: 'curved',
+          cornerRadius: 24,
+          segments: [
+            { width: 14, length: 80, gap: 250, color: '#fb7185', opacity: 0.4, blur: 5,  speedMultiplier: 1.0, easing: 'wave', wavePeriod: 2200, waveAmplitude: 2 },
+            { width: 3,  length: 40, gap: 600, color: '#fda4af', opacity: 0.9, blur: 0,  speedMultiplier: 1.4, easing: 'linear' },
+          ],
+        },
+        // Lime: Filter A → Merge → Output A
+        {
+          elements: ['#n6', '#n9', '#n11'],
+          cornerStyle: 'curved',
+          cornerRadius: 40,
+          segments: [
+            { width: 14, length: 80, gap: 250, color: '#a3e635', opacity: 0.4, blur: 5,  speedMultiplier: 1.0, easing: 'wave', wavePeriod: 2200, waveAmplitude: 2 },
+            { width: 3,  length: 40, gap: 600, color: '#d9f99d', opacity: 0.9, blur: 0,  speedMultiplier: 1.4, easing: 'linear' },
+            { width: 9,  length: 20, gap: 380, color: '#a3e635', opacity: 0.7, blur: 3,  speedMultiplier: 0.6, easing: 'ease-out' },
+          ],
+        },
+      ],
+    })
+
+    document.getElementById('btn-pause').addEventListener('click',  () => tc.pause())
+    document.getElementById('btn-resume').addEventListener('click', () => tc.resume())
+
+    document.getElementById('btn-add').addEventListener('click', () => {
+      tc.addPath({
+        elements: ['#n11', '#n12'],
+        cornerStyle: 'curved',
+        cornerRadius: 50,
+        segments: [
+          { width: 20, length: 120, gap: 350, color: '#f59e0b', opacity: 0.4, blur: 8, speedMultiplier: 0.9, easing: 'wave', wavePeriod: 3000, waveAmplitude: 2 },
+          { width: 5,  length: 60,  gap: 500, color: '#fcd34d', opacity: 0.9, blur: 0, speedMultiplier: 1.3, easing: 'pulse', pulseOn: 500, pulseOff: 500 },
+        ],
+      })
+    })
+
+    let count = 6
+    document.getElementById('btn-remove').addEventListener('click', () => {
+      if (count > 0) { tc.removePath(count - 1); count-- }
+    })
+  </script>
+</body>
+</html>

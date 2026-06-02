@@ -1,0 +1,37 @@
+{
+  "name": "@woptima/svg-flow",
+  "version": "1.0.0",
+  "description": "Scroll-animated SVG tube connector — connects DOM elements with animated pipeline paths",
+  "author": "radioBros",
+  "license": "MIT",
+  "repository": "github:bUxEE/svg-flow",
+  "type": "module",
+  "publishConfig": {
+    "access": "public"
+  },
+  "main": "./dist/svgflow.umd.js",
+  "module": "./dist/svgflow.js",
+  "types": "./dist/svgflow.d.ts",
+  "unpkg": "./dist/svgflow.umd.js",
+  "sideEffects": false,
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/svgflow.d.ts",
+      "import": "./dist/svgflow.js",
+      "require": "./dist/svgflow.umd.js"
+    }
+  },
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "npm run build"
+  },
+  "devDependencies": {
+    "tsup": "^8.0.0",
+    "typescript": "^5.4.0"
+  }
+}

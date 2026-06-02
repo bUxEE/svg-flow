@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>svgFlow — Responsive (relative layout)</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: #06060e;
+      color: #c9d1d9;
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* ── Relative layout: everything flows with the viewport ──────────────
+       No absolute pixel positions. Nodes are placed by flexbox + grid and
+       sized with %, vw and minmax(), so they physically move when you
+       resize the window. svgFlow's ResizeObserver re-measures and re-routes
+       the paths on every layout change. */
+
+    .stage {
+      display: flex;
+      flex-direction: column;
+      gap: clamp(40px, 9vh, 120px);
+      padding: clamp(40px, 8vh, 90px) clamp(20px, 6vw, 100px);
+      max-width: 1400px;
+      margin: 0 auto;
+    }
+
+    /* A row that wraps when it runs out of room */
+    .row {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: center;
+      gap: clamp(20px, 4vw, 60px);
+    }
+    .row.center { justify-content: center; }
+
+    .node {
+      flex: 1 1 200px;
+      min-width: 150px;
+      max-width: 320px;
+      padding: clamp(14px, 2.2vh, 26px) clamp(16px, 2vw, 28px);
+      background: #0d1117;
+      border-radius: 12px;
+      font-size: clamp(11px, 1.1vw, 14px);
+      font-weight: 700;
+      text-align: center;
+      letter-spacing: 0.06em;
+      user-select: none;
+    }
+
+    .cyan   { border: 1px solid #00ffcc44; color: #00ffcc; }
+    .amber  { border: 1px solid #f59e0b44; color: #f59e0b; }
+    .purple { border: 1px solid #a78bfa44; color: #a78bfa; }
+    .rose   { border: 1px solid #fb718544; color: #fb7185; }
+    .sky    { border: 1px solid #38bdf844; color: #38bdf8; }
+    .lime   { border: 1px solid #a3e63544; color: #a3e635; }
+
+    h1 {
+      font-size: clamp(15px, 2vw, 22px);
+      font-weight: 700;
+      color: #e6edf3;
+      letter-spacing: 0.04em;
+    }
+    h1 span { color: #00ffcc; }
+
+    .hint {
+      position: fixed;
+      bottom: 18px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 11px;
+      color: #4b5563;
+      letter-spacing: 0.08em;
+      text-align: center;
+      padding: 0 16px;
+      pointer-events: none;
+    }
+    .size-readout {
+      position: fixed;
+      top: 16px;
+      right: 16px;
+      font-size: 11px;
+      font-variant-numeric: tabular-nums;
+      color: #6b7280;
+      background: #0d1117cc;
+      border: 1px solid #1f2937;
+      border-radius: 6px;
+      padding: 6px 10px;
+      letter-spacing: 0.05em;
+      z-index: 10;
+    }
+  </style>
+</head>
+<body>
+  <div class="size-readout" id="size">—</div>
+
+  <div class="stage">
+    <h1>svgFlow · <span>relative layout</span> — resize the window to watch the path re-route</h1>
+
+    <!-- Row 1: two nodes spread to the edges (wraps when narrow) -->
+    <div class="row">
+      <div id="r1" class="node cyan">Source</div>
+      <div id="r2" class="node amber">Ingest</div>
+    </div>
+
+    <!-- Row 2: two centered processors -->
+    <div class="row center">
+      <div id="r3" class="node purple">Validate</div>
+      <div id="r4" class="node sky">Transform</div>
+    </div>
+
+    <!-- Row 3: two nodes spread to the edges -->
+    <div class="row">
+      <div id="r5" class="node rose">Enrich</div>
+      <div id="r6" class="node lime">Output</div>
+    </div>
+  </div>
+
+  <p class="hint">drag the window edge to shrink · scroll ↓ accelerate · scroll ↑ reverse</p>
+
+  <script type="module">
+    import { SvgFlow } from '../dist/svgflow.js'
+
+    new SvgFlow({
+      // ── global path shape ─────────────────────────────────────────────
+      cornerStyle: 'rounded',
+      cornerRadius: 22,
+      bends: 'auto',
+
+      // ── global track (tube body) ─────────────────────────────────────
+      trackStyle: {
+        width: 8,
+        color: '#0a0d13',
+        linecap: 'round',
+        opacity: 1,
+        tube: true,
+        innerColor: '#12182a',
+        innerWidth: 3,
+        blur: 0,
+      },
+
+      // ── animation ─────────────────────────────────────────────────────
+      baseSpeed: 0.8,
+      scrollMultiplier: 0.08,
+      friction: 0.92,
+
+      paths: [
+        // One continuous path through every node — re-routes on every reflow
+        {
+          elements: ['#r1', '#r2', '#r3', '#r4', '#r5', '#r6'],
+          cornerStyle: 'rounded',
+          cornerRadius: 22,
+          contourHug: 10,
+          hugDirection: 'long',
+          trackStyle: { color: '#0a0d13', innerColor: '#12182a', tube: true },
+          segments: [
+            { width: 18, length: 80, gap: 200, color: '#00ffcc', opacity: 0.35, blur: 6, speedMultiplier: 1.0, easing: 'linear' },
+            { width: 4,  length: 40, gap: 600, color: '#00ffcc', opacity: 0.9,  blur: 0, speedMultiplier: 1.4, easing: 'linear' },
+            { width: 10, length: 20, gap: 400, color: '#00ffcc', opacity: 0.8,  blur: 4, speedMultiplier: 0.7, easing: 'linear' },
+          ],
+        },
+      ],
+    })
+
+    // Live size readout so you can correlate breakpoints with reflow
+    const readout = document.getElementById('size')
+    const updateSize = () => { readout.textContent = `${window.innerWidth} × ${window.innerHeight}` }
+    updateSize()
+    window.addEventListener('resize', updateSize)
+  </script>
+</body>
+</html>
