@@ -114,6 +114,7 @@ Creates the overlay and starts animating immediately. Returns an instance with t
 | `removePath(index)` | Remove the path at the given index (in the order paths were added). |
 | `pause()` | Stop the animation loop. |
 | `resume()` | Restart the animation loop. |
+| `refresh()` | Recompute every path's geometry from the current DOM layout and update the viewBox. Call after moving/resizing connected elements in a way that doesn't change the document size (e.g. dragging an absolutely-positioned node); document-size changes are already handled by the internal `ResizeObserver`. |
 | `destroy()` | Remove the SVG overlay, cancel the loop, and detach all listeners. |
 
 > **There is no live `setOptions`.** To change a global option or a segment after construction, call `destroy()` and create a new instance. (The playground does exactly this.)
@@ -175,14 +176,16 @@ The static tube drawn under the animation.
 | Field | Type | Default | Description |
 |---|---|---|---|
 | `width` | `number` | `6` | Outer stroke width in px. |
-| `color` | `string` | `'#1a1a2e'` | Outer stroke color. |
+| `color` | `string` | `'#1a1a2e'` | Outer stroke color. **Any CSS color** — pass `rgba()`/`hsla()` for per-color alpha (transparency). |
 | `linecap` | `'round' \| 'square' \| 'butt'` | `'round'` | Stroke linecap. |
 | `blur` | `number` | `0` | Gaussian blur (glow) on the track. |
-| `opacity` | `number` | `1` | Track opacity. |
+| `opacity` | `number` | `1` | Whole-track opacity (multiplies the inner stroke too). For independent outer/inner alpha, use `rgba()` in the colors instead. |
 | `tube` | `boolean` | `false` | Draw a second inner stroke to fake a 3D pipe. |
-| `innerColor` | `string` | `'#2a2a4e'` | Inner stroke color (when `tube`). |
+| `innerColor` | `string` | `'#2a2a4e'` | Inner stroke color (when `tube`). **Any CSS color** — pass `rgba()`/`hsla()` for inner alpha. |
 | `innerWidth` | `number` | `0` | Inner stroke width (when `tube`). |
 | `dashArray` | `[number, number]` | `[0, 0]` | Optional `[dash, gap]` to make the *track* itself dashed. `[0, 0]` = solid. |
+
+> **Color & alpha.** There's no separate alpha field — `color` and `innerColor` take any CSS color string, so set transparency with `rgba(r, g, b, a)` (e.g. `'rgba(156,156,156,0.6)'`). The playground exposes this as separate **Outer color / Outer alpha / Inner color / Inner alpha** controls that it composes into `rgba()` for you.
 
 ---
 
@@ -195,8 +198,8 @@ One animated layer. Stack several per path for depth.
 | `width` | `number` | — | Stroke width in px. |
 | `length` | `number` | — | Length of each lit segment (the dash). |
 | `gap` | `number` | — | Gap between segments (the space). |
-| `color` | `string` | — | Segment color. |
-| `opacity` | `number` | — | 0–1. |
+| `color` | `string` | — | Segment color. **Any CSS color** — pass `rgba()`/`hsla()` for per-color alpha. |
+| `opacity` | `number` | — | Layer opacity, 0–1 (multiplies with any alpha in `color`). |
 | `blur` | `number` | — | Gaussian blur — the glow. `0` = crisp. |
 | `linecap` | `'round' \| 'square' \| 'butt'` | `'round'` | Stroke linecap. |
 | `speedMultiplier` | `number` | `1.0` | Per-segment speed relative to the path's momentum. |
