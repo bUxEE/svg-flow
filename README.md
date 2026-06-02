@@ -2,6 +2,8 @@
 
 > Scroll-animated SVG tube connectors for the web. Connect any DOM elements with glowing, momentum-driven pipeline paths — zero dependencies, framework-agnostic.
 
+**▶ [Live playground](https://buxee.github.io/svg-flow/examples/playground.html)** · [more examples](#examples)
+
 svgFlow injects a full-page SVG overlay behind your content and draws **Manhattan-style routed tubes** between the DOM elements you name. Glowing segments travel along each tube, driven by a scroll-momentum model: scroll down and the flow accelerates, scroll up and it reverses (both behaviours are toggleable via `accelerateOnScroll` / `reverseOnScrollUp`), then it decays back to a gentle drift. Paths re-route automatically when the layout changes, so they work with responsive, relatively-positioned layouts out of the box.
 
 Inspired by the pipeline animation on velocaption.com, rebuilt as a tiny vanilla library.
@@ -212,18 +214,20 @@ One animated layer. Stack several per path for depth.
 
 ## Examples
 
-Open these from a local server so the relative `../dist/svgflow.js` import resolves:
+Try them **live on GitHub Pages** — source for all four is in [`examples/`](https://github.com/bUxEE/svg-flow/tree/main/examples).
+
+- **[▶ Playground](https://buxee.github.io/svg-flow/examples/playground.html)** — interactive editor for every option, with add/remove nodes and live rebuild.
+- **[Basic](https://buxee.github.io/svg-flow/examples/basic.html)** — one continuous cyan path through four nodes.
+- **[Multi-connection](https://buxee.github.io/svg-flow/examples/multi-connection.html)** — six overlapping multi-color paths, with runtime add/remove/pause controls.
+- **[Responsive](https://buxee.github.io/svg-flow/examples/responsive.html)** — a single path through a flexbox layout (no absolute positions). Drag the window edge to watch the tube re-route live.
+
+To run them locally instead (the relative `../dist/svgflow.js` import needs a server):
 
 ```bash
 # from the repo root
 npx serve .
-# then visit http://localhost:3000/examples/basic.html
+# then visit http://localhost:3000/examples/playground.html
 ```
-
-- **[`examples/basic.html`](examples/basic.html)** — one continuous cyan path through four nodes.
-- **[`examples/multi-connection.html`](examples/multi-connection.html)** — six overlapping multi-color paths, with runtime add/remove/pause controls.
-- **[`examples/responsive.html`](examples/responsive.html)** — a single path through a flexbox layout (no absolute positions). Drag the window edge to watch the tube re-route live.
-- **[`examples/playground.html`](examples/playground.html)** — interactive editor for every option, with add/remove nodes and live rebuild.
 
 ### A richer path
 
